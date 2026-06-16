@@ -33,11 +33,11 @@ int servo_steps = 5;                  // Steps that influence the speed of the o
 int cars_parked = 0;  // Number of cars parked
 const int IRSensorPin1 = 16;  // IR sensor output pin connected to digital pin 21
 const int IRSensorPin2 = 17;
-// const int IRSensorPin3 = 18;
-// const int IRSensorPin4 = 17;
-// const int IRSensorPin5 = 16;
-// const int IRSensorPin6 = 21;
-// const int IRSensorPin7 = 22;
+const int IRSensorPin3 = 18;
+const int IRSensorPin4 = 19;
+const int IRSensorPin5 = 20;
+const int IRSensorPin6 = 21;
+const int IRSensorPin7 = 22;
 
 // Global previous IR Sensor values (Checks if it has been parked):
 int lastIRSensorValue1 = HIGH;  // All initialized at HIGH, meaning off.
@@ -64,11 +64,11 @@ void setup()
   /****************** IR SENSOR ******************/
   pinMode(IRSensorPin1, INPUT);  // Set IR sensor pin as input
   pinMode(IRSensorPin2, INPUT);  // Set IR sensor pin as input
-  // pinMode(IRSensorPin3, INPUT);  // Set IR sensor pin as input
-  // pinMode(IRSensorPin4, INPUT);  // Set IR sensor pin as input
-  // pinMode(IRSensorPin5, INPUT);  // Set IR sensor pin as input
-  // pinMode(IRSensorPin6, INPUT);  // Set IR sensor pin as input
-  // pinMode(IRSensorPin7, INPUT);  // Set IR sensor pin as input
+  pinMode(IRSensorPin3, INPUT);  // Set IR sensor pin as input
+  pinMode(IRSensorPin4, INPUT);  // Set IR sensor pin as input
+  pinMode(IRSensorPin5, INPUT);  // Set IR sensor pin as input
+  pinMode(IRSensorPin6, INPUT);  // Set IR sensor pin as input
+  pinMode(IRSensorPin7, INPUT);  // Set IR sensor pin as input
 
   /******************** SERVO ********************/
   // attaches the servo on pin 5 to the Servo object
@@ -103,6 +103,7 @@ void ParkToggle(int IRSensorValue, int &lastIRSensorValue)
   lcd.setCursor(0, 0);
   lcd.print("Cars Parked:");
   lcd.print(cars_parked);
+  lcd.print("/7");
 
   // Save current state for next loop
   lastIRSensorValue = IRSensorValue;
@@ -114,11 +115,11 @@ void loop()
 {
   int IRSensorValue1 = digitalRead(IRSensorPin1);  // Read the value from the IR sensor
   int IRSensorValue2 = digitalRead(IRSensorPin2);  // Read the value from the IR sensor
-  // int IRSensorValue3 = digitalRead(IRSensorPin3);  // Read the value from the IR sensor
-  // int IRSensorValue4 = digitalRead(IRSensorPin4);  // Read the value from the IR sensor
-  // int IRSensorValue5 = digitalRead(IRSensorPin5);  // Read the value from the IR sensor
-  // int IRSensorValue6 = digitalRead(IRSensorPin6);  // Read the value from the IR sensor
-  // int IRSensorValue7 = digitalRead(IRSensorPin7);  // Read the value from the IR sensor
+  int IRSensorValue3 = digitalRead(IRSensorPin3);  // Read the value from the IR sensor
+  int IRSensorValue4 = digitalRead(IRSensorPin4);  // Read the value from the IR sensor
+  int IRSensorValue5 = digitalRead(IRSensorPin5);  // Read the value from the IR sensor
+  int IRSensorValue6 = digitalRead(IRSensorPin6);  // Read the value from the IR sensor
+  int IRSensorValue7 = digitalRead(IRSensorPin7);  // Read the value from the IR sensor
 
   lcd.setCursor(0, 1);
 
@@ -153,9 +154,9 @@ void loop()
   /*************** PARKING ***************/
   ParkToggle(IRSensorValue1, lastIRSensorValue1); // For parking slot 1
   ParkToggle(IRSensorValue2, lastIRSensorValue2); // For parking slot 2
-  // ParkToggle(IRSensorValue3, lastIRSensorValue3); // For parking slot 3
-  // ParkToggle(IRSensorValue4, lastIRSensorValue4); // For parking slot 4
-  // ParkToggle(IRSensorValue5, lastIRSensorValue5); // For parking slot 5
-  // ParkToggle(IRSensorValue6, lastIRSensorValue6); // For parking slot 6
-  // ParkToggle(IRSensorValue7, lastIRSensorValue7); // For parking slot 7
+  ParkToggle(IRSensorValue3, lastIRSensorValue3); // For parking slot 3
+  ParkToggle(IRSensorValue4, lastIRSensorValue4); // For parking slot 4
+  ParkToggle(IRSensorValue5, lastIRSensorValue5); // For parking slot 5
+  ParkToggle(IRSensorValue6, lastIRSensorValue6); // For parking slot 6
+  ParkToggle(IRSensorValue7, lastIRSensorValue7); // For parking slot 7
 }
