@@ -2,24 +2,34 @@
 #include <LiquidCrystal.h>
 #include "SR04.h"
 
-/************************************* ULTRA SONIC *************************************/
+
+/***********************************************************************************************************/
+/*********************************************** SENSOR SETUP **********************************************/
+/***********************************************************************************************************/
+
+/******************************** ULTRA SONIC ********************************/
 #define TRIG_PIN 15
 #define ECHO_PIN 14
 SR04 ultrasonic = SR04(ECHO_PIN,TRIG_PIN);
 
 
-/***************************************** LCD *****************************************/
+/************************************ LCD ************************************/
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 
 
-/**************************************** SERVO ****************************************/
+/*********************************** SERVO ***********************************/
 long entrance_car_detected;
 
-Servo myservo;  // create Servo object to control a servo
-int pos = 0;    // variable to store the servo position
+Servo myservo;            // create Servo object to control a servo
+int servo_pos = 0;        // variable to store the servo servo_position
+int target_pos = 135;     // Limit at an angle of 135 degrees
+
+unsigned long last_servo_millis = 0;  // Global previous time value for servo
+const int servo_move_interval = 1;    // Time to wait between steps (1 ms)
+int servo_steps = 5;                  // Steps that influence the speed of the opening (can vary)
 
 
-/************************************** IR SENSOR **************************************/
+/********************************* IR SENSOR *********************************/
 int cars_parked = 0;  // Number of cars parked
 const int IRSensorPin1 = 16;  // IR sensor output pin connected to digital pin 21
 const int IRSensorPin2 = 17;
@@ -40,13 +50,18 @@ int lastIRSensorValue7 = HIGH;
 
 
 
+/***********************************************************************************************************/
+/********************************************* MAIN FUNCTIONS **********************************************/
+/***********************************************************************************************************/
+
+/************************* INITIALIZATION OF SENSORS *************************/
 void setup() 
 {
-  /************************************* ULTRA SONIC *************************************/
+  /***************** ULTRA SONIC *****************/
   Serial.begin(9600);
   delay(1000);
 
-  /************************************** IR SENSOR **************************************/
+  /****************** IR SENSOR ******************/
   pinMode(IRSensorPin1, INPUT);  // Set IR sensor pin as input
   pinMode(IRSensorPin2, INPUT);  // Set IR sensor pin as input
   // pinMode(IRSensorPin3, INPUT);  // Set IR sensor pin as input
@@ -55,18 +70,20 @@ void setup()
   // pinMode(IRSensorPin6, INPUT);  // Set IR sensor pin as input
   // pinMode(IRSensorPin7, INPUT);  // Set IR sensor pin as input
 
-  /**************************************** SERVO ****************************************/
+  /******************** SERVO ********************/
   // attaches the servo on pin 5 to the Servo object
   myservo.attach(5);
+  myservo.write(servo_pos);
 
-  /***************************************** LCD *****************************************/
+  /********************* LCD *********************/
   // set up the LCD's number of columns and rows:
   lcd.begin(16, 2);
   // Print a message to the LCD.
   lcd.print("Hello, World!");
 }
 
-/************************ FUNCTION FOR TOGGLING THE CAR PARK COUNT ************************/
+
+/************************* FUNCTION FOR  PARKED CARS *************************/
 void ParkToggle(int IRSensorValue, int &lastIRSensorValue) 
 {
   if (IRSensorValue == LOW && lastIRSensorValue == HIGH) {
@@ -91,7 +108,8 @@ void ParkToggle(int IRSensorValue, int &lastIRSensorValue)
   lastIRSensorValue = IRSensorValue;
 }
 
-/************************************* MAIN  FUNCTION *************************************/
+
+/******************************* MAIN FUNCTION *******************************/
 void loop() 
 {
   int IRSensorValue1 = digitalRead(IRSensorPin1);  // Read the value from the IR sensor
@@ -103,26 +121,33 @@ void loop()
   // int IRSensorValue7 = digitalRead(IRSensorPin7);  // Read the value from the IR sensor
 
   lcd.setCursor(0, 1);
+
+  /*************** SERVO ***************/
+  unsigned long servo_millis = millis();
   entrance_car_detected = ultrasonic.Distance();
 
-  // If a car is near the gate, open the gate
-  if ((entrance_car_detected <= 10) && (pos <= 45))
-  {
-
-    for (pos = 0; pos <= 135; pos += 1) { // goes from 0 degrees to 135 degrees
-      // in steps of 1 degree
-      myservo.write(pos);              // tell servo to go to position in variable 'pos'
-      delay(5);
-    }
+  // If a car is near the gate (entrance_car_detected is within 10m), open the gate
+  if ((entrance_car_detected <= 10)) {
+    target_pos = 135; // Open
+  }
+  // Otherwise, close it
+  else {
+    target_pos = 0;   // close
   }
 
-  // If there is no car on the gate, close the gate
-  if ((entrance_car_detected > 10) && (pos > 45))
-  {
-    for (pos = 135; pos >= 0; pos -= 1) { // goes from 135 degrees to 0 degrees
-      myservo.write(pos);              // tell servo to go to position in variable 'pos'
-      delay(10);
+  // Then, control the servo without blocking
+  if (servo_millis - last_servo_millis >= servo_move_interval) {
+    last_servo_millis = servo_millis; // Save the current timestamp
+
+    if (servo_pos <= target_pos) {
+      servo_steps = 10;
+      servo_pos += servo_steps;   // Open the gate
     }
+    else if (servo_pos > target_pos) {
+      servo_steps = 3;
+      servo_pos -= servo_steps;   // Close the gate
+    }
+    myservo.write(servo_pos);
   }
 
   /*************** PARKING ***************/
@@ -133,6 +158,4 @@ void loop()
   // ParkToggle(IRSensorValue5, lastIRSensorValue5); // For parking slot 5
   // ParkToggle(IRSensorValue6, lastIRSensorValue6); // For parking slot 6
   // ParkToggle(IRSensorValue7, lastIRSensorValue7); // For parking slot 7
-
-  delay(100);                       // waits 10 ms for the servo to reach the position
 }
