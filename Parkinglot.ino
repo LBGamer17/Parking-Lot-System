@@ -1,53 +1,59 @@
-#include <Servo.h>
-#include <LiquidCrystal.h>
-#include "SR04.h"
+#include <Wire.h>
+#include <WiFi.h>
+#include <PubSubClient.h>
+#include <LiquidCrystal_I2C.h>
+#include <ESP32Servo.h>
 
 
 /***********************************************************************************************************/
 /*********************************************** SENSOR SETUP **********************************************/
 /***********************************************************************************************************/
 
-/******************************** ULTRA SONIC ********************************/
-#define TRIG_PIN 15
-#define ECHO_PIN 14
-SR04 ultrasonic = SR04(ECHO_PIN,TRIG_PIN);
+/******************************** IR  SENSORS ********************************/
+const int IRSensorPin1 = 4;   // D4 (GPIO 4)
+const int IRSensorPin2 = 17;  // TX2 (GPIO 17)
 
-
-/************************************ LCD ************************************/
-LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
+// Global previous IR Sensor values (Checks if a car is entering or exitting)
+int lastIRSensorValue1 = HIGH;  // All initiated at HIGH, meaning off
+int lastIRSensorValue2 = HIGH;
 
 
 /*********************************** SERVO ***********************************/
-long entrance_car_detected;
+const int ServoPin = 16;     // RX2 (GPIO 16)
 
-Servo myservo;            // create Servo object to control a servo
-int servo_pos = 0;        // variable to store the servo servo_position
-int target_pos = 135;     // Limit at an angle of 135 degrees
+Servo myServo;        // create Servo object to control a servo
+int servo_pos = 0;    // varioable to store the servo servo_position
+int target_pos = 90;  // Limit at an angle of 90 degrees
 
 unsigned long last_servo_millis = 0;  // Global previous time value for servo
 const int servo_move_interval = 1;    // Time to wait between steps (1 ms)
 int servo_steps = 5;                  // Steps that influence the speed of the opening (can vary)
 
 
-/********************************* IR SENSOR *********************************/
-int cars_parked = 0;  // Number of cars parked
-const int IRSensorPin1 = 16;  // IR sensor output pin connected to digital pin 21
-const int IRSensorPin2 = 17;
-const int IRSensorPin3 = 18;
-const int IRSensorPin4 = 19;
-const int IRSensorPin5 = 20;
-const int IRSensorPin6 = 21;
-const int IRSensorPin7 = 22;
+/************************************ LCD ************************************/
+const int SDA_PIN = 21;       // D21 (SDA)
+const int SCL_PIN = 22;       // D22 (SCL)
 
-// Global previous IR Sensor values (Checks if it has been parked):
-int lastIRSensorValue1 = HIGH;  // All initialized at HIGH, meaning off.
-int lastIRSensorValue2 = HIGH;
-int lastIRSensorValue3 = HIGH;
-int lastIRSensorValue4 = HIGH;
-int lastIRSensorValue5 = HIGH;
-int lastIRSensorValue6 = HIGH;
-int lastIRSensorValue7 = HIGH;
+LiquidCrystal_I2C lcd(0x27, 16, 2);   // Initialize LCD at address 0x27
 
+
+/******************************** WIFI & MQTT ********************************/
+// Wi-fi
+const char *ssid = "MyWiFi";            // WiFi Name
+const char *password = "MyPassword";  // WiFi Password
+
+// Broker
+const char *mqtt_broker = "broker.emqx.io";
+const int mqtt_port = 1883;
+const char *spots_topic = "lance/parking/spots";
+const char *gate_topic = "lance/parking/gate";
+const char *mqtt_username = "emqx";
+const char *mqtt_password = "public";
+
+WiFiClient wifiClient;
+PubSubClient client(wifiClient);
+
+int cars_parked = 0;
 
 
 /***********************************************************************************************************/
@@ -57,23 +63,34 @@ int lastIRSensorValue7 = HIGH;
 /************************* INITIALIZATION OF SENSORS *************************/
 void setup() 
 {
-  /***************** ULTRA SONIC *****************/
-  Serial.begin(9600);
-  delay(1000);
+  /***************** WIFI & MQTT *****************/
+  Serial.begin(115200);   // 115200 baud rate
+  WiFi.begin(ssid, password);
+
+  // Test WiFi connection
+  while (WiFi.stats() != WL_CONNECTED) {
+    delay(500);
+    Serial.println("Connecting to Wi-Fi...");
+  }
+  Serial.println("Successfully connected to the Wi-Fi! :)");
+
+  // Connecting to the MQTT broker
+  client.setServer(mqtt_broker, mqtt_port);
+  client.setCallback(callback);
+
+  connectMQTT();
+
 
   /****************** IR SENSOR ******************/
   pinMode(IRSensorPin1, INPUT);  // Set IR sensor pin as input
   pinMode(IRSensorPin2, INPUT);  // Set IR sensor pin as input
-  pinMode(IRSensorPin3, INPUT);  // Set IR sensor pin as input
-  pinMode(IRSensorPin4, INPUT);  // Set IR sensor pin as input
-  pinMode(IRSensorPin5, INPUT);  // Set IR sensor pin as input
-  pinMode(IRSensorPin6, INPUT);  // Set IR sensor pin as input
-  pinMode(IRSensorPin7, INPUT);  // Set IR sensor pin as input
+
 
   /******************** SERVO ********************/
-  // attaches the servo on pin 5 to the Servo object
-  myservo.attach(5);
-  myservo.write(servo_pos);
+  // attaches the servo on pin 16 (RX2, GPIO16) to the Servo object
+  myServo.attach(ServoPin, 500, 2400);
+  myServo.write(servo_pos);
+
 
   /********************* LCD *********************/
   // set up the LCD's number of columns and rows:
@@ -83,57 +100,24 @@ void setup()
 }
 
 
-/************************* FUNCTION FOR  PARKED CARS *************************/
-void ParkToggle(int IRSensorValue, int &lastIRSensorValue) 
-{
-  if (IRSensorValue == LOW && lastIRSensorValue == HIGH) {
-    // If a car parked, increase the number of cars parked
-    cars_parked++;
-  }
-  if (IRSensorValue == HIGH && lastIRSensorValue == LOW) {
-    // If a car is not parked, decrease the number of cars parked
-    cars_parked--;
-  }
-  if (cars_parked < 0) {
-    cars_parked = 0;
-  }
-
-  // Update LCD
-  lcd.clear();
-  lcd.setCursor(0, 0);
-  lcd.print("Cars Parked:");
-  lcd.print(cars_parked);
-  lcd.print("/7");
-
-  // Save current state for next loop
-  lastIRSensorValue = IRSensorValue;
-}
-
-
-/******************************* MAIN FUNCTION *******************************/
-void loop() 
-{
-  int IRSensorValue1 = digitalRead(IRSensorPin1);  // Read the value from the IR sensor
-  int IRSensorValue2 = digitalRead(IRSensorPin2);  // Read the value from the IR sensor
-  int IRSensorValue3 = digitalRead(IRSensorPin3);  // Read the value from the IR sensor
-  int IRSensorValue4 = digitalRead(IRSensorPin4);  // Read the value from the IR sensor
-  int IRSensorValue5 = digitalRead(IRSensorPin5);  // Read the value from the IR sensor
-  int IRSensorValue6 = digitalRead(IRSensorPin6);  // Read the value from the IR sensor
-  int IRSensorValue7 = digitalRead(IRSensorPin7);  // Read the value from the IR sensor
+/***************** FUNCTION FOR CHECKING IF CAR ENTERED/EXIT *****************/
+void loop() {
+  int IRSensorValue1 = digitalRead(IRSensorPin1);
+  int IRSensorValue2 = digitalRead(IRSensorPin2);
 
   lcd.setCursor(0, 1);
 
-  /*************** SERVO ***************/
-  unsigned long servo_millis = millis();
-  entrance_car_detected = ultrasonic.Distance();
 
-  // If a car is near the gate (entrance_car_detected is within 10m), open the gate
-  if ((entrance_car_detected <= 10)) {
-    target_pos = 135; // Open
+  /**************** SERVO AND  IR ****************/
+  unsigned long servo_millis = millis();
+
+  // If a car enters
+  if (IRSensorValue1 == LOW || IRSensorValue2 == LOW) {
+    target_pos = 90;  // Open
   }
-  // Otherwise, close it
+  // If a car leaves
   else {
-    target_pos = 0;   // close
+    target_pos = 0;   // Close
   }
 
   // Then, control the servo without blocking
@@ -148,15 +132,53 @@ void loop()
       servo_steps = 3;
       servo_pos -= servo_steps;   // Close the gate
     }
-    myservo.write(servo_pos);
+    myServo.write(servo_pos);
   }
 
-  /*************** PARKING ***************/
-  ParkToggle(IRSensorValue1, lastIRSensorValue1); // For parking slot 1
-  ParkToggle(IRSensorValue2, lastIRSensorValue2); // For parking slot 2
-  ParkToggle(IRSensorValue3, lastIRSensorValue3); // For parking slot 3
-  ParkToggle(IRSensorValue4, lastIRSensorValue4); // For parking slot 4
-  ParkToggle(IRSensorValue5, lastIRSensorValue5); // For parking slot 5
-  ParkToggle(IRSensorValue6, lastIRSensorValue6); // For parking slot 6
-  ParkToggle(IRSensorValue7, lastIRSensorValue7); // For parking slot 7
+
+  /***************** WIFI & MQTT *****************/
+  if (!client.connected()) {
+    connectMQTT();
+  }
+  client.loop();
+}
+
+
+/******************** FUNCTION FOR CONNECTING TO THE MQTT ********************/
+void connectMQTT() {
+  while (!client.connected()) {
+    String client_id = "esp32-client-";
+    client_id += String(WiFi.macAddress());
+
+    Serial.println("Connecting to EMQX as:");
+    Serial.println(client_id);
+
+    if (client.connect(client_id.c_str(), mqtt_username, mqtt_password)) {
+      Serial.println("Connected to the public broker");
+    }
+    else {
+      Serial.print("Failed. State:");
+      Serial.println(client.state());
+      delay(2000);
+    }
+
+    // Publish and subscribe
+    client.subscribe(spots_topic);
+    client.publish(gate_topic, "ESP32 Connected :)")
+  }
+
+}
+
+
+/************************** FUNCTION FOR  CALLBACKS **************************/
+void callback(char *topic, byte *payload, unsigned int length) {
+  Serial.print("Message arrived in topic: ");
+  Serial.println(topic);
+
+  Serial.print("Message:");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char) payload[i]);
+  }
+  Serial.println();
+  Serial.println("--------------------");
 }
